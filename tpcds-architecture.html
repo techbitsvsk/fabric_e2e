@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TPC-DS Fabric — Architecture & Security</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #07090f;
+  --surface: #0c111c;
+  --card:    #0f1623;
+  --border:  #1a2640;
+  --cyan:    #00d4ff;
+  --green:   #00e87a;
+  --amber:   #f59e0b;
+  --red:     #f43f5e;
+  --blue:    #3b82f6;
+  --violet:  #8b5cf6;
+  --indigo:  #6366f1;
+  --text:    #e2e8f0;
+  --muted:   #4b6080;
+  --mono:    'IBM Plex Mono', monospace;
+  --sans:    'IBM Plex Sans', sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.5;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;z-index:0}
+.page{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:36px 28px}
+
+/* ── Header ── */
+header{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:24px;margin-bottom:36px;gap:20px}
+.hbadge{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--cyan);background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.18);padding:3px 9px;border-radius:2px;display:inline-block;margin-bottom:8px}
+h1{font-size:22px;font-weight:600;letter-spacing:-.02em;color:#fff;margin-bottom:4px}
+.hsub{color:var(--muted);font-family:var(--mono);font-size:9px}
+.hmeta{text-align:right;font-family:var(--mono);font-size:9px;color:var(--muted);line-height:2.2}
+.pulse{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:4px;box-shadow:0 0 7px var(--green);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Shared ── */
+.section{margin-bottom:44px}
+.slabel{font-family:var(--mono);font-size:9px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.slabel::after{content:'';flex:1;height:1px;background:var(--border)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:16px 18px}
+.ctitle{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tag{display:inline-block;font-family:var(--mono);font-size:8px;letter-spacing:.05em;padding:2px 6px;border-radius:2px;margin:2px 2px 2px 0;border:1px solid}
+.tg{color:var(--green);background:rgba(0,232,122,.06);border-color:rgba(0,232,122,.22)}
+.tc{color:var(--cyan);background:rgba(0,212,255,.06);border-color:rgba(0,212,255,.22)}
+.ta{color:var(--amber);background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.22)}
+.tr{color:var(--red);background:rgba(244,63,94,.06);border-color:rgba(244,63,94,.22)}
+.tv{color:var(--violet);background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.22)}
+.tb{color:var(--blue);background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.22)}
+.ti{color:var(--indigo);background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.22)}
+ul.cl{list-style:none;display:flex;flex-direction:column;gap:6px}
+ul.cl li{display:flex;align-items:flex-start;gap:7px;font-size:10px;color:#7a95b8}
+ul.cl li::before{content:'✓';color:var(--green);font-family:var(--mono);font-size:9px;flex-shrink:0;margin-top:1px}
+ul.cl li.w::before{content:'⚠';color:var(--amber)}
+ul.cl li.i::before{content:'→';color:var(--cyan)}
+ul.cl li.x::before{content:'✗';color:var(--red)}
+.kv{display:flex;flex-direction:column;gap:5px}
+.kvr{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.kvk{font-size:9px;color:var(--muted);font-family:var(--mono)}
+.kvv{font-size:9px;color:var(--text);font-weight:500;text-align:right}
+.sep{height:1px;background:var(--border);margin:10px 0}
+
+/* ── Arch diagram ── */
+.arch{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:28px;margin-bottom:44px;position:relative;overflow:hidden}
+.arch::before{content:'ARCHITECTURE  ·  SECURITY MODEL  ·  DATA FLOW';position:absolute;top:12px;left:18px;font-family:var(--mono);font-size:8px;letter-spacing:.18em;color:var(--muted)}
+
+/* Zone strips */
+.zones-row{display:grid;grid-template-columns:150px 1fr 220px 170px;gap:6px;margin-bottom:6px}
+.zstrip{font-family:var(--mono);font-size:8px;letter-spacing:.13em;text-transform:uppercase;padding:3px 8px;border-radius:2px;text-align:center;border:1px solid}
+
+/* Main cols */
+.arch-cols{display:grid;grid-template-columns:150px 1fr 220px 170px;gap:6px;align-items:start}
+
+/* Data layer boxes */
+.dlayer{border:1px solid;border-radius:4px;padding:11px 10px;position:relative}
+.dlayer-title{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid}
+.dlayer-path{font-family:var(--mono);font-size:8px;color:#5a7090;margin-bottom:5px}
+.dlayer-note{font-family:var(--mono);font-size:7.5px;color:#3d5470}
+
+/* Security enforcement bar */
+.sec-bar{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:3px;padding:9px 12px;margin-top:8px}
+.sec-bar-title{font-family:var(--mono);font-size:8px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px}
+.sec-chain{display:flex;flex-direction:column;gap:4px}
+.sec-step{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:8px}
+.sec-pill{padding:2px 7px;border-radius:2px;border:1px solid;font-size:7.5px;white-space:nowrap;flex-shrink:0}
+.sec-arrow{color:var(--muted);font-size:9px;flex-shrink:0}
+.sec-desc{color:var(--muted);font-size:7.5px}
+
+/* Flow animation */
+@keyframes flow{from{left:-6px}to{left:calc(100% + 2px)}}
+.animated-line{height:1px;background:var(--border);position:relative;overflow:hidden}
+.animated-line::after{content:'';position:absolute;top:-2px;width:5px;height:5px;border-radius:50%;animation:flow 2.2s linear infinite}
+
+/* Shortcut rows */
+.sc{display:flex;align-items:center;gap:0;margin-bottom:5px;font-family:var(--mono);font-size:8px}
+.sc-lh{padding:2px 7px;background:rgba(0,212,255,.07);border:1px solid rgba(0,212,255,.18);color:var(--cyan);border-radius:2px 0 0 2px}
+.sc-arr{padding:0 5px;color:var(--muted);font-size:9px;background:rgba(255,255,255,.02);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.sc-adls{padding:2px 7px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.18);color:var(--amber);border-radius:0 2px 2px 0}
+
+/* Gauge bar */
+.gauge{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(26,38,64,.5)}
+.gauge:last-child{border-bottom:none}
+.gauge-name{width:145px;flex-shrink:0;font-size:9px;font-family:var(--mono);color:var(--text)}
+.gauge-wrap{flex:1;height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:2px;animation:grow .9s ease-out both}
+@keyframes grow{from{width:0}}
+.gauge-pct{width:32px;text-align:right;font-family:var(--mono);font-size:9px}
+
+/* Identity flow */
+.id-chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.id-node{padding:3px 8px;border-radius:2px;border:1px solid;font-family:var(--mono);font-size:8px;white-space:nowrap}
+.id-arr{color:var(--muted);font-size:10px}
+
+/* Network layers */
+.nlayer{border:1px solid var(--border);border-radius:3px;margin-bottom:7px;overflow:hidden}
+.nlayer:last-child{margin-bottom:0}
+.nlayer-hdr{background:rgba(255,255,255,.025);padding:6px 12px;font-family:var(--mono);font-size:8px;letter-spacing:.1em;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--border)}
+.nlayer-body{padding:8px 12px;display:flex;flex-wrap:wrap;gap:5px}
+.nchip{font-family:var(--mono);font-size:8px;padding:2px 7px;border-radius:2px;border:1px solid}
+
+/* Compare table */
+.ctable{width:100%;border-collapse:collapse;font-size:10px}
+.ctable th{font-family:var(--mono);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:7px 11px;text-align:left;border-bottom:1px solid var(--border);background:rgba(255,255,255,.015)}
+.ctable td{padding:8px 11px;border-bottom:1px solid rgba(26,38,64,.5);vertical-align:top;color:#6a87a8}
+.ctable td:first-child{font-family:var(--mono);font-weight:600;color:var(--text);font-size:9px;white-space:nowrap}
+.ctable td.ok{color:var(--green)}
+.ctable td.pt{color:var(--amber)}
+.ctable td.gp{color:var(--red)}
+.ctable tr:hover td{background:rgba(255,255,255,.012)}
+.ctable .group td{background:rgba(0,212,255,.03);font-family:var(--mono);font-size:8px;letter-spacing:.15em;text-transform:uppercase;padding:5px 11px}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── HEADER ────────────────────────────────────────────────── -->
+<header>
+  <div>
+    <div class="hbadge">Reference Architecture v3.0</div>
+    <h1>TPC-DS → Microsoft Fabric Pipeline</h1>
+    <div class="hsub">Architecture · Security Guardrails · Identity · Network · Governance Standards</div>
+  </div>
+  <div class="hmeta">
+    <div><span class="pulse"></span>LIVE — CSO APPROVED</div>
+    <div>TENANT: pocdataproduct1 · UK SOUTH</div>
+    <div>ENTITLEMENT: Immuta (Central)</div>
+    <div>GOVERNANCE: Microsoft Purview</div>
+    <div>POSTURE: Wiz (Central Team)</div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: ARCHITECTURE + SECURITY MODEL                       -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="arch">
+
+  <!-- Zone header -->
+  <div class="zones-row" style="margin-top:12px">
+    <div class="zstrip" style="color:var(--blue);background:rgba(59,130,246,.06);border-color:rgba(59,130,246,.2)">SOURCE</div>
+    <div class="zstrip" style="color:var(--amber);background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.2)">TENANT ADLS GEN2 — CUSTOMER SUBSCRIPTION (UK SOUTH)</div>
+    <div class="zstrip" style="color:var(--cyan);background:rgba(0,212,255,.06);border-color:rgba(0,212,255,.2)">FABRIC — CATALOG + COMPUTE</div>
+    <div class="zstrip" style="color:var(--violet);background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.2)">CONSUMERS</div>
+  </div>
+
+  <!-- Main columns -->
+  <div class="arch-cols">
+
+    <!-- Source col -->
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="dlayer" style="border-color:rgba(59,130,246,.25);background:rgba(59,130,246,.04)">
+        <div class="dlayer-title" style="color:var(--blue);border-color:rgba(59,130,246,.2)">Generator</div>
+        <div class="dlayer-path">Python script<br>24 TPC-DS tables<br>~5 GB parquet</div>
+      </div>
+      <div style="display:flex;justify-content:center;align-items:center;gap:4px;padding:4px 0">
+        <div class="animated-line" style="flex:1"><div style="position:absolute;top:-2px;width:5px;height:5px;border-radius:50%;background:var(--blue);animation:flow 2s linear infinite;box-shadow:0 0 4px var(--blue)"></div></div>
+        <span style="font-family:var(--mono);font-size:7px;color:var(--muted)">upload</span>
+        <div class="animated-line" style="flex:1"></div>
+      </div>
+      <div class="dlayer" style="border-color:rgba(59,130,246,.25);background:rgba(59,130,246,.04)">
+        <div class="dlayer-title" style="color:var(--blue);border-color:rgba(59,130,246,.2)">Local / CI</div>
+        <div class="dlayer-path">az login auth<br>azure-storage SDK<br>raw-zone upload</div>
+      </div>
+    </div>
+
+    <!-- ADLS col -->
+    <div style="border:1px dashed rgba(245,158,11,.3);border-radius:5px;padding:14px 10px;position:relative">
+      <div style="position:absolute;top:-8px;left:12px;font-family:var(--mono);font-size:7.5px;letter-spacing:.12em;color:var(--amber);padding:0 5px;background:var(--card);text-transform:uppercase">pocdataproduct1.dfs.core.windows.net</div>
+
+      <!-- 3 data zones -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+
+        <div class="dlayer" style="border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.03)">
+          <div class="dlayer-title" style="color:var(--amber);border-color:rgba(245,158,11,.18)">raw-zone</div>
+          <div class="dlayer-path">tpcds/tables/<br>{table}/*.parquet</div>
+          <div class="dlayer-note" style="margin-top:5px">snappy compressed<br>24 tables · ~5 GB</div>
+          <div style="margin-top:7px"><span class="tag ta">parquet</span><span class="tag ta">24 tables</span></div>
+          <div style="margin-top:8px;padding-top:7px;border-top:1px dashed rgba(245,158,11,.15)">
+            <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted)">↓ Fabric CopyJobs<br>Parquet → Iceberg</div>
+          </div>
+        </div>
+
+        <div class="dlayer" style="border-color:rgba(148,163,184,.2);background:rgba(148,163,184,.025)">
+          <div class="dlayer-title" style="color:#94a3b8;border-color:rgba(148,163,184,.15)">prepared / silver</div>
+          <div class="dlayer-path">tpcds/silver/<br>silver_{table}/</div>
+          <div class="dlayer-note">Iceberg 1.5.0<br>metadata/ + data/<br>AES-256 · CMK</div>
+          <div style="margin-top:7px"><span class="tag tc">iceberg</span><span class="tag tc">cleansed</span></div>
+          <div style="margin-top:7px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">DQ · dedup · cast<br>audit cols · DLP ✓</div>
+        </div>
+
+        <div class="dlayer" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.04)">
+          <div class="dlayer-title" style="color:#fbbf24;border-color:rgba(251,191,36,.2)">prepared / gold</div>
+          <div class="dlayer-path">tpcds/gold/<br>gold_{table}/</div>
+          <div class="dlayer-note">Iceberg 1.5.0<br>time-travel · snaps<br>AES-256 · CMK</div>
+          <div style="margin-top:7px"><span class="tag ta">sales_fact</span><span class="tag ta">customer_360</span><span class="tag ta">product_perf</span></div>
+        </div>
+
+      </div>
+
+      <!-- Enforcement chain inside ADLS zone -->
+      <div class="sec-bar">
+        <div class="sec-bar-title" style="color:var(--amber)">Access enforcement chain — every read/write request</div>
+        <div class="sec-chain">
+          <div class="sec-step">
+            <div class="sec-pill" style="color:var(--violet);border-color:rgba(139,92,246,.3);background:rgba(139,92,246,.08)">Immuta</div>
+            <div class="sec-arrow">→</div>
+            <div class="sec-desc">PDP + PEP · data contracts per layer (dc-tpcds-{raw|silver|gold}-001) · ABAC policies · data masking rules</div>
+          </div>
+          <div class="sec-step">
+            <div class="sec-pill" style="color:var(--cyan);border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.08)">OneLake security plane</div>
+            <div class="sec-arrow">→</div>
+            <div class="sec-desc">Item-level roles (not workspace defaults) · control plane + data plane · Lakehouse ReadWriteAll / ReadAll per principal</div>
+          </div>
+          <div class="sec-step">
+            <div class="sec-pill" style="color:var(--blue);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.08)">Purview DLP</div>
+            <div class="sec-arrow">→</div>
+            <div class="sec-desc">tpcds-fabric-dlp policy · sensitivity label monitoring · block exfil · audit log → Log Analytics</div>
+          </div>
+          <div class="sec-step">
+            <div class="sec-pill" style="color:var(--green);border-color:rgba(0,232,122,.3);background:rgba(0,232,122,.08)">Azure Storage RBAC</div>
+            <div class="sec-arrow">→</div>
+            <div class="sec-desc">Final enforcement layer · Blob Data Contributor (Fabric MSI, Spark compute) · Blob Reader (Power BI MSI)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wiz posture strip -->
+      <div style="margin-top:7px;padding:6px 10px;background:rgba(244,63,94,.04);border:1px solid rgba(244,63,94,.18);border-radius:3px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-family:var(--mono);font-size:7.5px;color:var(--red)">WIZ (central team — agentless)</span>
+        <span style="font-family:var(--mono);font-size:7.5px;color:var(--muted)">Cloud connector scan · ADLS + Fabric · Custom threat model policies · Risk findings → central triage</span>
+      </div>
+    </div>
+
+    <!-- Fabric col -->
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="dlayer" style="border-color:rgba(0,212,255,.22);background:rgba(0,212,255,.04)">
+        <div class="dlayer-title" style="color:var(--cyan);border-color:rgba(0,212,255,.18)">Lakehouse tpcds</div>
+        <div class="dlayer-path" style="color:var(--cyan);opacity:.7">CATALOG ONLY<br>zero data in OneLake</div>
+        <div style="margin-top:8px">
+          <div class="sc"><div class="sc-lh">dbo/{table}</div><div class="sc-arr">→</div><div class="sc-adls">iceberg/{t}</div></div>
+          <div class="sc"><div class="sc-lh">dbo/silver_{t}</div><div class="sc-arr">→</div><div class="sc-adls">silver/{t}</div></div>
+          <div class="sc"><div class="sc-lh">dbo/gold_{t}</div><div class="sc-arr">→</div><div class="sc-adls">gold/{t}</div></div>
+        </div>
+        <div style="margin-top:8px;padding-top:7px;border-top:1px solid var(--border)">
+          <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted)">Item-level roles:<br>ReadWriteAll → MSI<br>ReadAll → PBI SPN<br>ReadAll → reader group</div>
+        </div>
+      </div>
+      <div class="dlayer" style="border-color:rgba(0,212,255,.15);background:rgba(0,212,255,.02)">
+        <div class="dlayer-title" style="color:#5a7090;border-color:var(--border)">Spark Compute</div>
+        <div class="dlayer-path">CopyJobs (REST)<br>Silver notebook<br>Gold notebook</div>
+        <div style="margin-top:5px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">Auth: workspace MSI<br>token scope: storage<br>Immuta validates →<br>ADLS RBAC enforces</div>
+      </div>
+      <div class="dlayer" style="border-color:rgba(99,102,241,.22);background:rgba(99,102,241,.04)">
+        <div class="dlayer-title" style="color:var(--indigo);border-color:rgba(99,102,241,.18)">Purview</div>
+        <div class="dlayer-path" style="color:var(--muted)">Data Protection<br>Governance<br>DLP monitoring</div>
+      </div>
+    </div>
+
+    <!-- Consumers col -->
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div class="dlayer" style="border-color:rgba(139,92,246,.22);background:rgba(139,92,246,.04)">
+        <div class="dlayer-title" style="color:var(--violet);border-color:rgba(139,92,246,.18)">Power BI</div>
+        <div class="dlayer-path">Direct Lake<br>gold_* tables<br>no data import</div>
+        <div style="margin-top:5px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">Auth: PBI SPN<br>Immuta: gold contract<br>ADLS RBAC: Reader</div>
+      </div>
+      <div class="dlayer" style="border-color:rgba(139,92,246,.15);background:rgba(139,92,246,.02)">
+        <div class="dlayer-title" style="color:#5a7090;border-color:var(--border)">Analysts</div>
+        <div class="dlayer-path">Spark / SQL<br>via Lakehouse<br>shortcuts</div>
+        <div style="margin-top:5px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">Auth: user identity<br>Immuta: row/col filter<br>Purview: DLP check</div>
+      </div>
+      <div class="dlayer" style="border-color:rgba(244,63,94,.18);background:rgba(244,63,94,.03)">
+        <div class="dlayer-title" style="color:var(--red);border-color:rgba(244,63,94,.15)">Wiz Scanner</div>
+        <div class="dlayer-path">Agentless<br>Central team<br>Custom policies</div>
+        <div style="margin-top:5px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">Read-only posture<br>Findings → ITSM<br>No data access</div>
+      </div>
+    </div>
+
+  </div><!-- /arch-cols -->
+</div><!-- /arch -->
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: IDENTITY & ENTITLEMENT MODEL                        -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="slabel">Identity & Entitlement Model</div>
+  <div class="g3">
+
+    <!-- Auth chain -->
+    <div class="card">
+      <div class="ctitle"><div class="dot" style="background:var(--cyan)"></div>Authentication Chain</div>
+      <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted);margin-bottom:8px">Pipeline / Notebooks (no secrets)</div>
+      <div class="id-chain">
+        <div class="id-node" style="color:var(--cyan);border-color:rgba(0,212,255,.25);background:rgba(0,212,255,.06)">Workspace MSI</div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--blue);border-color:rgba(59,130,246,.25);background:rgba(59,130,246,.06)">Entra ID Token<br><span style="font-size:7px;opacity:.6">scope: storage</span></div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--violet);border-color:rgba(139,92,246,.25);background:rgba(139,92,246,.06)">Immuta</div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--green);border-color:rgba(0,232,122,.25);background:rgba(0,232,122,.06)">ADLS</div>
+      </div>
+      <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted);margin-bottom:8px;margin-top:6px">Interactive / Analyst</div>
+      <div class="id-chain">
+        <div class="id-node" style="color:var(--blue);border-color:rgba(59,130,246,.25);background:rgba(59,130,246,.06)">User Identity<br><span style="font-size:7px;opacity:.6">MFA + CA</span></div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--violet);border-color:rgba(139,92,246,.25);background:rgba(139,92,246,.06)">Immuta<br><span style="font-size:7px;opacity:.6">data contract</span></div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--cyan);border-color:rgba(0,212,255,.25);background:rgba(0,212,255,.06)">OneLake plane</div>
+        <div class="id-arr">→</div>
+        <div class="id-node" style="color:var(--green);border-color:rgba(0,232,122,.25);background:rgba(0,232,122,.06)">Purview DLP</div>
+      </div>
+      <ul class="cl" style="margin-top:10px">
+        <li>Zero secrets or PATs in notebooks or pipelines</li>
+        <li>Token lifetime 1h — auto-refresh by Fabric MSI</li>
+        <li>Conditional Access: MFA + compliant device</li>
+        <li class="w">Account key removed — MSI OAuth for all Spark writes</li>
+      </ul>
+    </div>
+
+    <!-- Immuta entitlement -->
+    <div class="card">
+      <div class="ctitle"><div class="dot" style="background:var(--violet)"></div>Immuta — Central Entitlement</div>
+      <div style="font-family:var(--mono);font-size:7.5px;color:var(--muted);margin-bottom:9px">Data contracts bundled with OneLake security plane</div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        <div style="border:1px solid rgba(245,158,11,.2);border-radius:3px;padding:7px 9px;background:rgba(245,158,11,.04)">
+          <div style="font-family:var(--mono);font-size:8px;color:var(--amber);margin-bottom:3px">dc-tpcds-raw-001</div>
+          <div style="font-size:9px;color:#5a7090">Read: CopyJob MSI, Silver notebook MSI<br>Write: upload SPN (CI/CD only)</div>
+        </div>
+        <div style="border:1px solid rgba(148,163,184,.18);border-radius:3px;padding:7px 9px;background:rgba(148,163,184,.025)">
+          <div style="font-family:var(--mono);font-size:8px;color:#94a3b8;margin-bottom:3px">dc-tpcds-silver-001</div>
+          <div style="font-size:9px;color:#5a7090">Read: Gold notebook MSI<br>Write: Silver notebook MSI<br>Row filter: none · Column mask: PII cols</div>
+        </div>
+        <div style="border:1px solid rgba(251,191,36,.25);border-radius:3px;padding:7px 9px;background:rgba(251,191,36,.04)">
+          <div style="font-family:var(--mono);font-size:8px;color:#fbbf24;margin-bottom:3px">dc-tpcds-gold-001</div>
+          <div style="font-size:9px;color:#5a7090">Read: Power BI SPN, analyst group<br>Write: Gold notebook MSI<br>Row filter: by analyst attribute · Masked: none (aggregated)</div>
+        </div>
+      </div>
+
+      <ul class="cl">
+        <li>Immuta is sole PDP — all entitlement decisions here</li>
+        <li>OneLake security plane is PEP (data + control plane)</li>
+        <li>No default workspace roles — item-level grants only</li>
+        <li>Attribute-based: role, department, clearance attributes</li>
+        <li class="i">Dynamic data masking via Immuta policy (email, DOB)</li>
+      </ul>
+    </div>
+
+    <!-- Item-level roles + Purview -->
+    <div class="card">
+      <div class="ctitle"><div class="dot" style="background:var(--blue)"></div>Item-Level Roles & Purview Governance</div>
+
+      <div style="font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:7px">Item roles (not workspace defaults)</div>
+      <div class="kv" style="margin-bottom:12px">
+        <div class="kvr"><span class="kvk">Lakehouse · pipeline MSI</span><span class="kvv" style="color:var(--amber);font-size:8px">ReadWriteAll</span></div>
+        <div class="kvr"><span class="kvk">Lakehouse · Power BI SPN</span><span class="kvv" style="color:var(--green);font-size:8px">ReadAll</span></div>
+        <div class="kvr"><span class="kvk">Lakehouse · analyst group</span><span class="kvv" style="color:var(--green);font-size:8px">ReadAll</span></div>
+        <div class="kvr"><span class="kvk">Notebook · pipeline MSI</span><span class="kvv" style="color:var(--cyan);font-size:8px">Execute</span></div>
+        <div class="kvr"><span class="kvk">Pipeline · runner SPN</span><span class="kvv" style="color:var(--cyan);font-size:8px">Execute</span></div>
+      </div>
+
+      <div class="sep"></div>
+      <div style="font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:7px">Purview modules</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px">
+        <span class="tag tb">Data Protection</span>
+        <span class="tag tb">Governance</span>
+        <span class="tag tb">DLP: tpcds-fabric-dlp</span>
+        <span class="tag tb">Sensitivity: Internal</span>
+        <span class="tag tb">Lineage scan</span>
+        <span class="tag tb">Column classification</span>
+      </div>
+      <ul class="cl">
+        <li>Purview scans gold tables — auto-classifies columns</li>
+        <li>DLP policy blocks copy to non-approved destinations</li>
+        <li>Lineage: source → raw → silver → gold → PBI dataset</li>
+        <li>Data Protection labels propagate to Power BI dataset</li>
+        <li class="i">Immuta policies reference Purview sensitivity labels</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: NETWORK SECURITY + WIZ POSTURE                      -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="slabel">Network Security & Security Posture</div>
+  <div class="g2">
+
+    <!-- Network layers -->
+    <div class="card">
+      <div class="ctitle"><div class="dot" style="background:var(--red)"></div>Network Defence in Depth</div>
+
+      <div class="nlayer">
+        <div class="nlayer-hdr"><span style="color:var(--red);font-weight:600">L1</span><span style="color:var(--text)">Perimeter — Azure Storage Firewall</span></div>
+        <div class="nlayer-body">
+          <span class="nchip" style="color:var(--red);border-color:rgba(244,63,94,.3);background:rgba(244,63,94,.06)">Deny all public</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Allow: Fabric service tag</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Allow: Purview MSI</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Allow: Wiz scanner IP</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Trusted Azure services</span>
+        </div>
+      </div>
+      <div class="nlayer">
+        <div class="nlayer-hdr"><span style="color:var(--amber);font-weight:600">L2</span><span style="color:var(--text)">Transport — TLS + ABFSS</span></div>
+        <div class="nlayer-body">
+          <span class="nchip" style="color:var(--amber);border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.06)">TLS 1.2 min</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">abfss:// only</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">HTTPS enforced</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">No http:// accepted</span>
+        </div>
+      </div>
+      <div class="nlayer">
+        <div class="nlayer-hdr"><span style="color:var(--cyan);font-weight:600">L3</span><span style="color:var(--text)">Identity — Entra ID + Immuta + OneLake</span></div>
+        <div class="nlayer-body">
+          <span class="nchip" style="color:var(--cyan);border-color:rgba(0,212,255,.3);background:rgba(0,212,255,.06)">MSI OAuth (no keys)</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Immuta PDP</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">OneLake item roles</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Conditional Access</span>
+        </div>
+      </div>
+      <div class="nlayer">
+        <div class="nlayer-hdr"><span style="color:var(--blue);font-weight:600">L4</span><span style="color:var(--text)">Data — Purview DLP + RBAC</span></div>
+        <div class="nlayer-body">
+          <span class="nchip" style="color:var(--blue);border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.06)">Purview DLP policy</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Storage RBAC</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">AES-256 CMK</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Immuta col masking</span>
+        </div>
+      </div>
+      <div class="nlayer">
+        <div class="nlayer-hdr"><span style="color:var(--green);font-weight:600">L5</span><span style="color:var(--text)">Resilience — Recovery + Retention</span></div>
+        <div class="nlayer-body">
+          <span class="nchip" style="color:var(--green);border-color:rgba(0,232,122,.3);background:rgba(0,232,122,.06)">Soft delete 30d</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">RAGRS geo-redundant</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Iceberg snapshots 7d</span>
+          <span class="nchip" style="color:#7a95b8;border-color:var(--border)">Immutable retention</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wiz + posture gauges -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <div class="card">
+        <div class="ctitle"><div class="dot" style="background:var(--red)"></div>Wiz — Security Posture (Central Team)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div style="border:1px solid rgba(244,63,94,.2);border-radius:3px;padding:8px 10px;background:rgba(244,63,94,.03)">
+            <div style="font-family:var(--mono);font-size:8px;color:var(--red);margin-bottom:4px">Scan coverage</div>
+            <ul class="cl">
+              <li>ADLS Gen2 storage account</li>
+              <li>Fabric workspace config</li>
+              <li>Network exposure graph</li>
+              <li>IAM misconfigurations</li>
+            </ul>
+          </div>
+          <div style="border:1px solid rgba(244,63,94,.2);border-radius:3px;padding:8px 10px;background:rgba(244,63,94,.03)">
+            <div style="font-family:var(--mono);font-size:8px;color:var(--red);margin-bottom:4px">Custom policies</div>
+            <ul class="cl">
+              <li>Based on threat model</li>
+              <li>Tenant-specific rules</li>
+              <li>Findings → ITSM</li>
+              <li class="i">Central team triages risk</li>
+            </ul>
+          </div>
+        </div>
+        <ul class="cl">
+          <li>Agentless — read-only cloud connector, no data access</li>
+          <li>DSPM: public blob exposure check on all containers</li>
+          <li>Alerts on new unmanaged principals granted storage RBAC</li>
+          <li class="i">Findings feed to Sentinel SIEM for correlation</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="ctitle"><div class="dot" style="background:var(--green)"></div>Security Posture Score</div>
+        <div class="gauge"><div class="gauge-name">Data Sovereignty</div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--green);animation-delay:.05s"></div></div><div class="gauge-pct" style="color:var(--green)">100%</div></div>
+        <div class="gauge"><div class="gauge-name">Encryption at Rest</div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--green);animation-delay:.1s"></div></div><div class="gauge-pct" style="color:var(--green)">100%</div></div>
+        <div class="gauge"><div class="gauge-name">Identity (no secrets)</div><div class="gauge-wrap"><div class="gauge-fill" style="width:100%;background:var(--green);animation-delay:.15s"></div></div><div class="gauge-pct" style="color:var(--green)">100%</div></div>
+        <div class="gauge"><div class="gauge-name">Entitlement (Immuta)</div><div class="gauge-wrap"><div class="gauge-fill" style="width:95%;background:var(--green);animation-delay:.2s"></div></div><div class="gauge-pct" style="color:var(--green)">95%</div></div>
+        <div class="gauge"><div class="gauge-name">DLP & Governance</div><div class="gauge-wrap"><div class="gauge-fill" style="width:90%;background:var(--green);animation-delay:.25s"></div></div><div class="gauge-pct" style="color:var(--green)">90%</div></div>
+        <div class="gauge"><div class="gauge-name">Network Controls</div><div class="gauge-wrap"><div class="gauge-fill" style="width:80%;background:var(--amber);animation-delay:.3s"></div></div><div class="gauge-pct" style="color:var(--amber)">80%</div></div>
+        <div class="gauge"><div class="gauge-name">Audit & Lineage</div><div class="gauge-wrap"><div class="gauge-fill" style="width:85%;background:var(--amber);animation-delay:.35s"></div></div><div class="gauge-pct" style="color:var(--amber)">85%</div></div>
+        <div class="gauge"><div class="gauge-name">Incident Response</div><div class="gauge-wrap"><div class="gauge-fill" style="width:60%;background:var(--amber);animation-delay:.4s"></div></div><div class="gauge-pct" style="color:var(--amber)">60%</div></div>
+        <div style="margin-top:8px;font-family:var(--mono);font-size:7.5px;color:var(--muted)">Network: private endpoint pending · IR: runbook in progress</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: STANDARDS COMPARISON                                 -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="slabel">Comparison Against Data Architecture Standards</div>
+  <table class="ctable">
+    <thead>
+      <tr>
+        <th>Standard / Pillar</th>
+        <th>Requirement</th>
+        <th>Implementation</th>
+        <th>Status</th>
+        <th>Remaining Gap / Action</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr class="group"><td colspan="5" style="color:var(--cyan)">DAMA-DMBOK v2 — Data Management</td></tr>
+      <tr><td>Data Governance</td><td>Ownership, stewardship, policy</td><td>Immuta data contracts define ownership per layer. Purview collection maps stewardship. Item-level Fabric roles enforce separation of duties.</td><td class="ok">✓ Strong</td><td>Publish data product SLAs and steward register in Purview catalogue</td></tr>
+      <tr><td>Data Quality</td><td>DQ rules, profiling, monitoring</td><td>Silver notebook: null checks, dedup, type casting, range validation, flag columns. Purview DQ scans gold tables.</td><td class="ok">✓ Implemented</td><td>Add DQ metrics Iceberg table; alert on null rate &gt; 5% threshold</td></tr>
+      <tr><td>Metadata Management</td><td>Lineage, business glossary, catalogue</td><td>Purview Governance module scans all three Iceberg layers. Lakehouse shortcuts register tables as catalogue entries. Column lineage: source → raw → silver → gold → PBI.</td><td class="ok">✓ Implemented</td><td>Attach business glossary terms to gold columns in Purview</td></tr>
+      <tr><td>Data Architecture</td><td>Tiered / medallion pattern</td><td>Raw (Parquet) → Silver (Iceberg, cleaned) → Gold (Iceberg, curated). Clear zone separation in ADLS containers.</td><td class="ok">✓ Implemented</td><td>—</td></tr>
+      <tr><td>Data Security</td><td>Classification, access, encryption</td><td>Immuta ABAC + OneLake item-level + Purview DLP + Azure RBAC layered model. AES-256 CMK. TLS 1.2. No secrets in code.</td><td class="ok">✓ Strong</td><td>Enable Defender for Storage threat detection on ADLS account</td></tr>
+      <tr><td>Reference / Master Data</td><td>Canonical shared dimensions</td><td>date_dim, item, customer exposed as gold shortcuts across all consumers. Single source of truth pattern.</td><td class="ok">✓ Implemented</td><td>Register dimension versioning policy; notify downstream on breaking schema change</td></tr>
+
+      <tr class="group"><td colspan="5" style="color:var(--green)">NIST Cybersecurity Framework 2.0</td></tr>
+      <tr><td>IDENTIFY</td><td>Asset inventory, risk assessment</td><td>Wiz cloud connector builds asset graph (ADLS + Fabric). Config.yaml documents all resource IDs. Purview data catalogue covers all layers.</td><td class="ok">✓ Implemented</td><td>Connect Wiz asset graph to CMDB; assign criticality rating per dataset</td></tr>
+      <tr><td>PROTECT</td><td>Access control, data security</td><td>Full stack: Immuta → OneLake plane → Purview DLP → ADLS RBAC. MSI-only auth. CMK encryption. Storage firewall deny-all-default.</td><td class="ok">✓ Strong</td><td>Enable private endpoint; move to BYOK CMK managed in Key Vault HSM</td></tr>
+      <tr><td>DETECT</td><td>Continuous monitoring, anomalies</td><td>Wiz agentless scanning. Purview DLP alerts. Diagnostic logs → Log Analytics. Fabric capacity metric alerts.</td><td class="ok">✓ Implemented</td><td>Sentinel SIEM integration for cross-signal correlation; Immuta access anomaly alerts</td></tr>
+      <tr><td>RESPOND</td><td>Incident response</td><td>Soft delete + RAGRS enables recovery. Immuta contract suspension blocks access instantly. Wiz findings → ITSM.</td><td class="pt">Partial</td><td>Formalise IR runbook: GDPR 72h notification, Immuta suspension playbook, chain of custody</td></tr>
+      <tr><td>RECOVER</td><td>Recovery planning</td><td>Iceberg snapshot retention 7d (time-travel). Soft delete 30d. RAGRS geo-redundant. CopyJob retry 3× exp backoff.</td><td class="ok">✓ Implemented</td><td>Document and test RTO &lt; 4h / RPO &lt; 1h; quarterly restore drill</td></tr>
+
+      <tr class="group"><td colspan="5" style="color:var(--violet)">Zero Trust Architecture (CISA / Microsoft)</td></tr>
+      <tr><td>Verify Explicitly</td><td>Authenticate every request with context</td><td>Entra ID + Conditional Access on all identities. Immuta validates data contract on every access. No implicit trust.</td><td class="ok">✓ Strong</td><td>Add Entra ID Protection sign-in risk policy (block risky sign-ins)</td></tr>
+      <tr><td>Least Privilege</td><td>Minimal rights, JIT, no standing admin</td><td>Item-level roles (not workspace-wide). Immuta ABAC limits to data contract scope. Power BI SPN = Reader only. No default workspace roles used.</td><td class="ok">✓ Strong</td><td>Implement PIM for Contributor elevation; time-bound Immuta entitlement reviews</td></tr>
+      <tr><td>Assume Breach</td><td>Segment, encrypt, monitor blast radius</td><td>Separate ADLS containers per zone (raw/silver/gold) with independent RBAC. Immuta contract per zone. Wiz threat graph shows blast radius. Full encryption.</td><td class="ok">✓ Implemented</td><td>Private endpoints to eliminate public surface; network segmentation review by Wiz team</td></tr>
+
+      <tr class="group"><td colspan="5" style="color:var(--amber)">Azure Well-Architected Framework</td></tr>
+      <tr><td>Security</td><td>Defence in depth, no implicit trust</td><td>5-layer model: network firewall → TLS → Immuta/OneLake → Purview DLP → ADLS RBAC. Zero secrets in code. Wiz posture scanning.</td><td class="ok">✓ Strong</td><td>Defender for Storage; private endpoint; Key Vault HSM for CMK</td></tr>
+      <tr><td>Reliability</td><td>RTO/RPO, redundancy, failure modes</td><td>RAGRS + geo-replication. Iceberg snapshots. CopyJob retry. Immuta HA. Purview HA (managed service).</td><td class="ok">✓ Strong</td><td>Define and publish RTO/RPO SLAs; test disaster recovery quarterly</td></tr>
+      <tr><td>Operational Excellence</td><td>IaC, repeatability, observability</td><td>Python orchestrator — 8-stage, idempotent, resumable. Fabric REST API provisioning. Structured logging.</td><td class="pt">Partial</td><td>Migrate ADLS + Fabric provisioning to Bicep/Terraform; OpenTelemetry traces on pipeline runs</td></tr>
+      <tr><td>Cost Optimisation</td><td>Right-sized compute, lifecycle</td><td>Fabric CU metered — no always-on servers. Spark auto-terminate. Direct Lake avoids Power BI import.</td><td class="ok">✓ Implemented</td><td>ADLS lifecycle: raw parquet → Cool tier after 90d; Archive after 1y</td></tr>
+      <tr><td>Performance</td><td>Partitioning, format, caching</td><td>Iceberg columnar. Adaptive query execution. Direct Lake queries ADLS in-place. Iceberg predicate pushdown.</td><td class="ok">✓ Implemented</td><td>Partition silver_store_sales by ss_sold_date_sk year/month for large-scale scans</td></tr>
+
+      <tr class="group"><td colspan="5" style="color:var(--red)">UK GDPR / Data Protection Act 2018</td></tr>
+      <tr><td>Data Minimisation</td><td>Only necessary data processed</td><td>TPC-DS is synthetic — no real PII. Gold layer exposes aggregated models. Immuta column masking on silver PII-like columns (email, DOB).</td><td class="ok">✓ (Synthetic)</td><td>Implement Purview sensitivity labelling + Immuta masking if real PII introduced</td></tr>
+      <tr><td>Data Localisation</td><td>Stay within approved jurisdiction</td><td>UK South ADLS primary + UK West RAGRS replica. Fabric tenant = UK. No cross-border transfer in pipeline. Purview in UK.</td><td class="ok">✓ Implemented</td><td>Document transfer impact assessment if Wiz or Immuta sends metadata cross-border</td></tr>
+      <tr><td>Right to Erasure</td><td>Delete individual data on request</td><td>Iceberg DELETE + MERGE supports row-level erasure. Immuta contract can restrict access instantly pending deletion. Snapshot expiry clears history.</td><td class="pt">Partial</td><td>Build erasure runbook: Iceberg row delete → snapshot expiry → shortcut refresh → PBI dataset refresh</td></tr>
+      <tr><td>Breach Notification</td><td>72h GDPR notification</td><td>Wiz critical findings → ITSM &lt; 1h. Purview DLP alert on anomalous data movement. Sentinel SIEM correlation.</td><td class="pt">Partial</td><td>Formalise notification chain: Wiz/Sentinel alert → CISO → ICO within 72h. Document in IR runbook.</td></tr>
+
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ── FOOTER ─────────────────────────────────────────────── -->
+<div style="border-top:1px solid var(--border);padding-top:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+  <div style="font-family:var(--mono);font-size:8px;color:var(--muted)">
+    TPC-DS → Microsoft Fabric · Architecture v3.0 · Classification: INTERNAL · UK SOUTH
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <span class="tag tg">DAMA-DMBOK v2</span>
+    <span class="tag tg">NIST CSF 2.0</span>
+    <span class="tag tv">Zero Trust</span>
+    <span class="tag ta">Azure WAF</span>
+    <span class="tag tr">UK GDPR</span>
+    <span class="tag tv">Immuta</span>
+    <span class="tag tb">Purview</span>
+    <span class="tag tr">Wiz</span>
+  </div>
+</div>
+
+</div>
+</body>
+</html>
