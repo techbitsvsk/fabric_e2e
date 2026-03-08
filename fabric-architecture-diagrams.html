@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microsoft Fabric + ADLS Gen2 — Hybrid Security Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1B3A5C;
+    --blue: #2E5D8A;
+    --lightBlue: #D6E4F0;
+    --paleBlue: #EEF4FA;
+    --azure: #0078D4;
+    --green: #2E7D32;
+    --greenLight: #E8F5E9;
+    --orange: #E65100;
+    --orangeLight: #FFF3E0;
+    --red: #C62828;
+    --redLight: #FCE4EC;
+    --purple: #5C2D91;
+    --purpleLight: #F3E5F5;
+    --gold: #F57F17;
+    --goldLight: #FFFDE7;
+    --gray: #607080;
+    --dark: #1A1A2E;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    background: #F4F6F9;
+    color: var(--dark);
+    min-height: 100vh;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 100%);
+    padding: 36px 24px 28px;
+    text-align: center;
+    color: white;
+  }
+  .header h1 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 30px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+  .header p {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: 6px;
+  }
+
+  .container { max-width: 1000px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+    position: sticky;
+    top: 0;
+    background: #F4F6F9;
+    padding: 12px 0;
+    z-index: 10;
+  }
+  .tab {
+    padding: 10px 22px;
+    border-radius: 8px;
+    border: 2px solid #DDE3EA;
+    background: white;
+    color: var(--navy);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .tab:hover { border-color: var(--blue); background: var(--paleBlue); }
+  .tab.active {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+
+  .diagram-panel {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .diagram-panel.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 32px;
+    border: 1px solid var(--lightBlue);
+    box-shadow: 0 2px 12px rgba(27, 58, 92, 0.06);
+  }
+  .card h3 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    color: var(--navy);
+    font-size: 21px;
+    font-weight: 400;
+    margin-bottom: 6px;
+  }
+  .card .subtitle {
+    color: var(--gray);
+    font-size: 13px;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  svg { width: 100%; height: auto; }
+
+  .print-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 24px;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 4px 16px rgba(27, 58, 92, 0.25);
+    z-index: 20;
+  }
+  .print-btn:hover { background: var(--blue); }
+
+  @media print {
+    .tabs, .print-btn, .header { display: none; }
+    .diagram-panel { display: block !important; page-break-after: always; }
+    body { background: white; }
+    .card { box-shadow: none; border: 1px solid #ccc; margin-bottom: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Microsoft Fabric + ADLS Gen2</h1>
+  <p>Hybrid Security Architecture — Visual Reference Documentation</p>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('layers')">Three-Layer Security</button>
+    <button class="tab" onclick="showTab('medallion')">Medallion Architecture</button>
+    <button class="tab" onclick="showTab('planes')">Control vs Data Plane</button>
+    <button class="tab" onclick="showTab('flow')">Security Evaluation Flow</button>
+    <button class="tab" onclick="showTab('all')">Show All</button>
+  </div>
+
+  <!-- DIAGRAM 1: Three-Layer Security -->
+  <div id="panel-layers" class="diagram-panel active">
+    <div class="card">
+      <h3>Three-Layer Security Architecture</h3>
+      <p class="subtitle">Each layer enforces independently. A user must pass all three checks to access data. Failure at any layer blocks access regardless of permissions at other layers.</p>
+      <svg viewBox="0 0 920 520">
+        <defs>
+          <marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#1B3A5C"/></marker>
+          <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#0078D4"/><stop offset="100%" stop-color="#00BCF2"/></linearGradient>
+          <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#5C2D91"/><stop offset="100%" stop-color="#8661C5"/></linearGradient>
+          <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#2E7D32"/><stop offset="100%" stop-color="#66BB6A"/></linearGradient>
+          <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E65100"/><stop offset="100%" stop-color="#FF9800"/></linearGradient>
+        </defs>
+
+        <!-- User -->
+        <circle cx="80" cy="60" r="24" fill="#1B3A5C"/>
+        <text x="80" y="56" text-anchor="middle" fill="white" font-size="20">&#128100;</text>
+        <text x="80" y="73" text-anchor="middle" fill="white" font-size="9" font-weight="bold">USER</text>
+        <text x="80" y="100" text-anchor="middle" fill="#607080" font-size="11" font-weight="600">Entra ID</text>
+        <text x="80" y="114" text-anchor="middle" fill="#607080" font-size="10">Authentication</text>
+
+        <line x1="112" y1="60" x2="178" y2="60" stroke="#1B3A5C" stroke-width="2.5" marker-end="url(#ah)"/>
+        <text x="145" y="50" text-anchor="middle" fill="#2E7D32" font-size="9" font-weight="bold">STEP 1</text>
+
+        <!-- Layer 1: ADLS -->
+        <rect x="185" y="15" width="210" height="190" rx="10" fill="url(#g1)" opacity="0.08" stroke="#0078D4" stroke-width="2"/>
+        <rect x="185" y="15" width="210" height="34" rx="10" fill="url(#g1)"/>
+        <rect x="185" y="39" width="210" height="10" fill="url(#g1)"/>
+        <text x="290" y="38" text-anchor="middle" fill="white" font-size="12" font-weight="bold">LAYER 1: ADLS GEN2</text>
+        <text x="290" y="55" text-anchor="middle" fill="white" font-size="9">Storage Control Plane</text>
+        <rect x="200" y="70" width="180" height="28" rx="5" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="290" y="88" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Azure Storage Firewall</text>
+        <rect x="200" y="106" width="180" height="28" rx="5" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="290" y="124" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Private Endpoints / VNet</text>
+        <rect x="200" y="142" width="180" height="28" rx="5" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="290" y="160" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Azure RBAC + ACLs</text>
+        <rect x="200" y="175" width="180" height="22" rx="5" fill="#E3F2FD" stroke="#0078D4" stroke-width="1"/>
+        <text x="290" y="189" text-anchor="middle" fill="#0078D4" font-size="9">CMK Encryption at Rest</text>
+
+        <line x1="405" y1="108" x2="450" y2="108" stroke="#1B3A5C" stroke-width="2.5" marker-end="url(#ah)"/>
+        <text x="428" y="99" text-anchor="middle" fill="#2E7D32" font-size="9" font-weight="bold">STEP 2</text>
+
+        <!-- Layer 2: Fabric -->
+        <rect x="458" y="15" width="210" height="190" rx="10" fill="url(#g2)" opacity="0.08" stroke="#5C2D91" stroke-width="2"/>
+        <rect x="458" y="15" width="210" height="34" rx="10" fill="url(#g2)"/>
+        <rect x="458" y="39" width="210" height="10" fill="url(#g2)"/>
+        <text x="563" y="38" text-anchor="middle" fill="white" font-size="12" font-weight="bold">LAYER 2: FABRIC</text>
+        <text x="563" y="55" text-anchor="middle" fill="white" font-size="9">Fabric Control Plane</text>
+        <rect x="473" y="70" width="180" height="28" rx="5" fill="white" stroke="#5C2D91" stroke-width="1"/>
+        <text x="563" y="88" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Workspace Roles (RBAC)</text>
+        <rect x="473" y="106" width="180" height="28" rx="5" fill="white" stroke="#5C2D91" stroke-width="1"/>
+        <text x="563" y="124" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Workspace Identity (SPN)</text>
+        <rect x="473" y="142" width="180" height="28" rx="5" fill="white" stroke="#5C2D91" stroke-width="1"/>
+        <text x="563" y="160" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Capacity Assignment</text>
+        <rect x="473" y="175" width="180" height="22" rx="5" fill="#F3E5F5" stroke="#5C2D91" stroke-width="1"/>
+        <text x="563" y="189" text-anchor="middle" fill="#5C2D91" font-size="9">OneLake Shortcut (Delegated)</text>
+
+        <line x1="678" y1="108" x2="720" y2="108" stroke="#1B3A5C" stroke-width="2.5" marker-end="url(#ah)"/>
+        <text x="699" y="99" text-anchor="middle" fill="#2E7D32" font-size="9" font-weight="bold">STEP 3</text>
+
+        <!-- Layer 3: OneLake -->
+        <rect x="728" y="15" width="180" height="190" rx="10" fill="url(#g3)" opacity="0.08" stroke="#2E7D32" stroke-width="2"/>
+        <rect x="728" y="15" width="180" height="34" rx="10" fill="url(#g3)"/>
+        <rect x="728" y="39" width="180" height="10" fill="url(#g3)"/>
+        <text x="818" y="38" text-anchor="middle" fill="white" font-size="12" font-weight="bold">LAYER 3: ONELAKE</text>
+        <text x="818" y="55" text-anchor="middle" fill="white" font-size="9">Fabric Data Plane</text>
+        <rect x="738" y="70" width="160" height="28" rx="5" fill="white" stroke="#2E7D32" stroke-width="1"/>
+        <text x="818" y="88" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">OneLake Security Roles</text>
+        <rect x="738" y="106" width="160" height="28" rx="5" fill="white" stroke="#2E7D32" stroke-width="1"/>
+        <text x="818" y="124" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">RLS / CLS Enforcement</text>
+        <rect x="738" y="142" width="160" height="28" rx="5" fill="white" stroke="#2E7D32" stroke-width="1"/>
+        <text x="818" y="160" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="600">Folder / Table Grants</text>
+        <rect x="738" y="175" width="160" height="22" rx="5" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1"/>
+        <text x="818" y="189" text-anchor="middle" fill="#2E7D32" font-size="9">Deny-by-Default Model</text>
+
+        <!-- Purview Overlay -->
+        <rect x="185" y="225" width="723" height="65" rx="10" fill="url(#g4)" opacity="0.08" stroke="#E65100" stroke-width="2" stroke-dasharray="6,4"/>
+        <rect x="185" y="225" width="723" height="28" rx="10" fill="url(#g4)"/>
+        <rect x="185" y="243" width="723" height="10" fill="url(#g4)"/>
+        <text x="546" y="245" text-anchor="middle" fill="white" font-size="12" font-weight="bold">LAYER 3a: MICROSOFT PURVIEW GOVERNANCE OVERLAY</text>
+        <text x="300" y="277" text-anchor="middle" fill="#E65100" font-size="10" font-weight="600">Sensitivity Labels</text>
+        <text x="460" y="277" text-anchor="middle" fill="#E65100" font-size="10" font-weight="600">Protection Policies</text>
+        <text x="640" y="277" text-anchor="middle" fill="#E65100" font-size="10" font-weight="600">DLP Detection</text>
+        <text x="810" y="277" text-anchor="middle" fill="#E65100" font-size="10" font-weight="600">Audit Logging</text>
+
+        <!-- Key Insight -->
+        <rect x="40" y="310" width="850" height="95" rx="10" fill="#EEF4FA" stroke="#1B3A5C" stroke-width="1.5"/>
+        <text x="65" y="335" fill="#1B3A5C" font-size="12" font-weight="bold">KEY SECURITY PRINCIPLE</text>
+        <text x="65" y="358" fill="#1A1A2E" font-size="11">ADLS RBAC = Ceiling of access (maximum possible data exposure via shortcut credential)</text>
+        <text x="65" y="378" fill="#1A1A2E" font-size="11">OneLake Security = Floor of access (minimum data visible to Viewer-role consumers)</text>
+        <text x="65" y="398" fill="#1A1A2E" font-size="11">Purview = Override layer (protection policies can block access regardless of Fabric or ADLS permissions)</text>
+
+        <!-- Legend -->
+        <rect x="40" y="425" width="850" height="85" rx="10" fill="#FAFAFA" stroke="#DDD" stroke-width="1"/>
+        <text x="65" y="448" fill="#607080" font-size="10" font-weight="bold">LEGEND</text>
+        <rect x="65" y="458" width="14" height="14" rx="2" fill="url(#g1)"/>
+        <text x="85" y="469" fill="#1A1A2E" font-size="10">Azure / ADLS Gen2 (Independent of Fabric)</text>
+        <rect x="310" y="458" width="14" height="14" rx="2" fill="url(#g2)"/>
+        <text x="330" y="469" fill="#1A1A2E" font-size="10">Microsoft Fabric Platform</text>
+        <rect x="520" y="458" width="14" height="14" rx="2" fill="url(#g3)"/>
+        <text x="540" y="469" fill="#1A1A2E" font-size="10">OneLake Data Plane Security</text>
+        <rect x="730" y="458" width="14" height="14" rx="2" fill="url(#g4)"/>
+        <text x="750" y="469" fill="#1A1A2E" font-size="10">Purview Governance</text>
+        <circle cx="65" cy="494" r="5" fill="#2E7D32"/>
+        <text x="76" y="498" fill="#1A1A2E" font-size="10">Sequential evaluation — failure at any step blocks access</text>
+        <rect x="410" y="490" width="30" height="2" stroke="#E65100" stroke-width="2" stroke-dasharray="6,4" fill="none"/>
+        <text x="446" y="498" fill="#1A1A2E" font-size="10">Cross-platform overlay (spans all layers)</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- DIAGRAM 2: Medallion Architecture -->
+  <div id="panel-medallion" class="diagram-panel">
+    <div class="card">
+      <h3>Medallion Architecture: ADLS Gen2 Storage + Fabric Compute via Shortcuts</h3>
+      <p class="subtitle">Separate ADLS Gen2 storage accounts per layer with dedicated Fabric workspaces connected via OneLake shortcuts. Each storage account has independent firewall rules and RBAC.</p>
+      <svg viewBox="0 0 920 510">
+        <defs>
+          <marker id="ah2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#1B3A5C"/></marker>
+        </defs>
+
+        <!-- Headers -->
+        <rect x="20" y="10" width="350" height="35" rx="6" fill="#1B3A5C"/>
+        <text x="195" y="33" text-anchor="middle" fill="white" font-size="13" font-weight="bold">ADLS GEN2 STORAGE LAYER</text>
+        <text x="195" y="60" text-anchor="middle" fill="#607080" font-size="10">(Data at rest — Azure Control Plane)</text>
+        <rect x="550" y="10" width="350" height="35" rx="6" fill="#5C2D91"/>
+        <text x="725" y="33" text-anchor="middle" fill="white" font-size="13" font-weight="bold">FABRIC COMPUTE LAYER</text>
+        <text x="725" y="60" text-anchor="middle" fill="#607080" font-size="10">(Processing &amp; consumption — Fabric Control + Data Plane)</text>
+
+        <!-- Bronze -->
+        <rect x="20" y="80" width="350" height="110" rx="8" fill="#FFF8E1" stroke="#F57F17" stroke-width="1.5"/>
+        <rect x="20" y="80" width="350" height="28" rx="8" fill="#F57F17"/>
+        <rect x="20" y="100" width="350" height="8" fill="#F57F17"/>
+        <text x="195" y="100" text-anchor="middle" fill="white" font-size="12" font-weight="bold">BRONZE (Raw)</text>
+        <text x="40" y="128" fill="#1A1A2E" font-size="10" font-weight="600">Storage Account: sa-bronze-prod</text>
+        <text x="40" y="145" fill="#607080" font-size="9.5">Container: bronze  |  Firewall: Private only</text>
+        <text x="40" y="160" fill="#607080" font-size="9.5">RBAC: WS Identity → Blob Data Contributor</text>
+        <text x="40" y="175" fill="#607080" font-size="9.5">ACLs: Per source folder (landing zones)</text>
+
+        <line x1="380" y1="135" x2="540" y2="135" stroke="#F57F17" stroke-width="2" stroke-dasharray="8,4" marker-end="url(#ah2)"/>
+        <rect x="420" y="121" width="80" height="20" rx="4" fill="#FFFDE7" stroke="#F57F17" stroke-width="1"/>
+        <text x="460" y="135" text-anchor="middle" fill="#F57F17" font-size="9" font-weight="bold">SHORTCUT</text>
+
+        <rect x="550" y="80" width="350" height="110" rx="8" fill="#FFF8E1" stroke="#F57F17" stroke-width="1.5"/>
+        <rect x="550" y="80" width="350" height="28" rx="8" fill="#F57F17"/>
+        <rect x="550" y="100" width="350" height="8" fill="#F57F17"/>
+        <text x="725" y="100" text-anchor="middle" fill="white" font-size="12" font-weight="bold">WS-Bronze-Prod</text>
+        <text x="570" y="128" fill="#1A1A2E" font-size="10" font-weight="600">Roles: Data Engineers = Contributor</text>
+        <text x="570" y="145" fill="#607080" font-size="9.5">Auth: Workspace Identity (Trusted Access)</text>
+        <text x="570" y="160" fill="#607080" font-size="9.5">OneLake Security: Not required (restricted workspace access)</text>
+        <text x="570" y="175" fill="#607080" font-size="9.5">Items: Notebooks, Pipelines, Dataflows</text>
+
+        <!-- Silver -->
+        <rect x="20" y="210" width="350" height="110" rx="8" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1.5"/>
+        <rect x="20" y="210" width="350" height="28" rx="8" fill="#2E7D32"/>
+        <rect x="20" y="230" width="350" height="8" fill="#2E7D32"/>
+        <text x="195" y="230" text-anchor="middle" fill="white" font-size="12" font-weight="bold">SILVER (Curated)</text>
+        <text x="40" y="258" fill="#1A1A2E" font-size="10" font-weight="600">Storage Account: sa-silver-prod</text>
+        <text x="40" y="275" fill="#607080" font-size="9.5">Container: silver  |  Firewall: Private only</text>
+        <text x="40" y="290" fill="#607080" font-size="9.5">RBAC: WS Identity → Blob Data Reader</text>
+        <text x="40" y="305" fill="#607080" font-size="9.5">ACLs: Per domain folder structure</text>
+
+        <line x1="380" y1="265" x2="540" y2="265" stroke="#2E7D32" stroke-width="2" stroke-dasharray="8,4" marker-end="url(#ah2)"/>
+        <rect x="420" y="251" width="80" height="20" rx="4" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1"/>
+        <text x="460" y="265" text-anchor="middle" fill="#2E7D32" font-size="9" font-weight="bold">SHORTCUT</text>
+
+        <rect x="550" y="210" width="350" height="110" rx="8" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1.5"/>
+        <rect x="550" y="210" width="350" height="28" rx="8" fill="#2E7D32"/>
+        <rect x="550" y="230" width="350" height="8" fill="#2E7D32"/>
+        <text x="725" y="230" text-anchor="middle" fill="white" font-size="12" font-weight="bold">WS-Silver-Prod</text>
+        <text x="570" y="258" fill="#1A1A2E" font-size="10" font-weight="600">Roles: Data Engineers = Contributor</text>
+        <text x="570" y="275" fill="#607080" font-size="9.5">Auth: Workspace Identity (Trusted Access)</text>
+        <text x="570" y="290" fill="#607080" font-size="9.5">OneLake Security: Enabled, per-domain roles</text>
+        <text x="570" y="305" fill="#607080" font-size="9.5">Items: Lakehouses, Notebooks, Semantic Models</text>
+
+        <!-- Gold -->
+        <rect x="20" y="340" width="350" height="110" rx="8" fill="#EEF4FA" stroke="#0078D4" stroke-width="1.5"/>
+        <rect x="20" y="340" width="350" height="28" rx="8" fill="#0078D4"/>
+        <rect x="20" y="360" width="350" height="8" fill="#0078D4"/>
+        <text x="195" y="360" text-anchor="middle" fill="white" font-size="12" font-weight="bold">GOLD (Consumption)</text>
+        <text x="40" y="388" fill="#1A1A2E" font-size="10" font-weight="600">Storage Account: sa-gold-prod</text>
+        <text x="40" y="405" fill="#607080" font-size="9.5">Container: gold  |  Firewall: Private only</text>
+        <text x="40" y="420" fill="#607080" font-size="9.5">RBAC: WS Identity → Blob Data Reader</text>
+        <text x="40" y="435" fill="#607080" font-size="9.5">ACLs: Read-only per business unit folder</text>
+
+        <line x1="380" y1="395" x2="540" y2="395" stroke="#0078D4" stroke-width="2" stroke-dasharray="8,4" marker-end="url(#ah2)"/>
+        <rect x="420" y="381" width="80" height="20" rx="4" fill="#EEF4FA" stroke="#0078D4" stroke-width="1"/>
+        <text x="460" y="395" text-anchor="middle" fill="#0078D4" font-size="9" font-weight="bold">SHORTCUT</text>
+
+        <rect x="550" y="340" width="350" height="110" rx="8" fill="#EEF4FA" stroke="#0078D4" stroke-width="1.5"/>
+        <rect x="550" y="340" width="350" height="28" rx="8" fill="#0078D4"/>
+        <rect x="550" y="360" width="350" height="8" fill="#0078D4"/>
+        <text x="725" y="360" text-anchor="middle" fill="white" font-size="12" font-weight="bold">WS-Gold-Prod</text>
+        <text x="570" y="388" fill="#1A1A2E" font-size="10" font-weight="600">Roles: BI Analysts = Contributor, Consumers = Viewer</text>
+        <text x="570" y="405" fill="#607080" font-size="9.5">Auth: Workspace Identity (Trusted Access)</text>
+        <text x="570" y="420" fill="#607080" font-size="9.5">OneLake Security: Mandatory RLS + CLS per BU</text>
+        <text x="570" y="435" fill="#607080" font-size="9.5">Items: Reports, Dashboards, Semantic Models</text>
+
+        <!-- Flow arrows -->
+        <line x1="195" y1="192" x2="195" y2="208" stroke="#1B3A5C" stroke-width="1.5" marker-end="url(#ah2)"/>
+        <line x1="195" y1="322" x2="195" y2="338" stroke="#1B3A5C" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+        <!-- Callout -->
+        <rect x="20" y="465" width="880" height="40" rx="8" fill="#EEF4FA" stroke="#1B3A5C" stroke-width="1"/>
+        <text x="40" y="483" fill="#1B3A5C" font-size="10" font-weight="bold">ISOLATION:</text>
+        <text x="110" y="483" fill="#1A1A2E" font-size="10">Separate ADLS Gen2 storage accounts per medallion layer. The Bronze workspace identity SPN has no RBAC on the Gold storage account.</text>
+        <text x="40" y="498" fill="#607080" font-size="9.5">Physical isolation at the Azure control plane level — no cross-layer access even if Fabric workspace security is compromised.</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- DIAGRAM 3: Control vs Data Plane -->
+  <div id="panel-planes" class="diagram-panel">
+    <div class="card">
+      <h3>Control Plane vs Data Plane: Role Separation Model</h3>
+      <p class="subtitle">Platform administration (Control Plane) and data product development (Data Plane) operate with distinct roles, permissions, and responsibilities.</p>
+      <svg viewBox="0 0 920 440">
+        <!-- Control Plane -->
+        <rect x="20" y="10" width="430" height="420" rx="12" fill="#FFF3E0" stroke="#E65100" stroke-width="2"/>
+        <rect x="20" y="10" width="430" height="36" rx="12" fill="#E65100"/>
+        <rect x="20" y="34" width="430" height="12" fill="#E65100"/>
+        <text x="235" y="34" text-anchor="middle" fill="white" font-size="14" font-weight="bold">CONTROL PLANE</text>
+
+        <rect x="40" y="60" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="135" y="80" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Fabric Admin</text>
+        <text x="135" y="96" text-anchor="middle" fill="#607080" font-size="9">Tenant settings</text>
+        <text x="135" y="110" text-anchor="middle" fill="#607080" font-size="9">Domain management</text>
+        <text x="135" y="124" text-anchor="middle" fill="#607080" font-size="9">Security baselines</text>
+
+        <rect x="250" y="60" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="345" y="80" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Capacity Admin</text>
+        <text x="345" y="96" text-anchor="middle" fill="#607080" font-size="9">Scale / Pause capacity</text>
+        <text x="345" y="110" text-anchor="middle" fill="#607080" font-size="9">Assign workspaces</text>
+        <text x="345" y="124" text-anchor="middle" fill="#607080" font-size="9">Monitor metrics</text>
+
+        <rect x="40" y="150" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="135" y="170" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Workspace Admin</text>
+        <text x="135" y="186" text-anchor="middle" fill="#607080" font-size="9">Provisioning</text>
+        <text x="135" y="200" text-anchor="middle" fill="#607080" font-size="9">Access management</text>
+        <text x="135" y="214" text-anchor="middle" fill="#607080" font-size="9">Git integration</text>
+
+        <rect x="250" y="150" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="345" y="170" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Azure Subscription</text>
+        <text x="345" y="186" text-anchor="middle" fill="#607080" font-size="9">ADLS Gen2 RBAC</text>
+        <text x="345" y="200" text-anchor="middle" fill="#607080" font-size="9">Network / Firewall</text>
+        <text x="345" y="214" text-anchor="middle" fill="#607080" font-size="9">Private endpoints</text>
+
+        <rect x="40" y="240" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="135" y="260" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Purview Admin</text>
+        <text x="135" y="276" text-anchor="middle" fill="#607080" font-size="9">DLP policies</text>
+        <text x="135" y="290" text-anchor="middle" fill="#607080" font-size="9">Sensitivity labels</text>
+        <text x="135" y="304" text-anchor="middle" fill="#607080" font-size="9">Audit configuration</text>
+
+        <rect x="250" y="240" width="190" height="75" rx="6" fill="white" stroke="#E65100" stroke-width="1"/>
+        <text x="345" y="260" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Automation (GitLab)</text>
+        <text x="345" y="276" text-anchor="middle" fill="#607080" font-size="9">Terraform IaC</text>
+        <text x="345" y="290" text-anchor="middle" fill="#607080" font-size="9">Service principal mgmt</text>
+        <text x="345" y="304" text-anchor="middle" fill="#607080" font-size="9">Runbook execution</text>
+
+        <rect x="40" y="330" width="400" height="28" rx="6" fill="#FFF3E0" stroke="#E65100" stroke-width="1.5"/>
+        <text x="240" y="349" text-anchor="middle" fill="#E65100" font-size="10" font-weight="bold">SG-Fabric-PlatformAdmins  |  SG-Fabric-Governance</text>
+
+        <rect x="40" y="370" width="400" height="50" rx="6" fill="#FCE4EC" stroke="#C62828" stroke-width="1"/>
+        <text x="240" y="390" text-anchor="middle" fill="#C62828" font-size="10" font-weight="bold">✗  MUST NOT GRANT AT CONTROL PLANE</text>
+        <text x="240" y="406" text-anchor="middle" fill="#1A1A2E" font-size="9">Lakehouse Viewer  |  SQL Endpoint Reader  |  OneLake Reader  |  Item Contributor</text>
+
+        <!-- Data Plane -->
+        <rect x="470" y="10" width="430" height="420" rx="12" fill="#EEF4FA" stroke="#0078D4" stroke-width="2"/>
+        <rect x="470" y="10" width="430" height="36" rx="12" fill="#0078D4"/>
+        <rect x="470" y="34" width="430" height="12" fill="#0078D4"/>
+        <text x="685" y="34" text-anchor="middle" fill="white" font-size="14" font-weight="bold">DATA PLANE</text>
+
+        <rect x="490" y="60" width="190" height="75" rx="6" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="585" y="80" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Member (Data Owner)</text>
+        <text x="585" y="96" text-anchor="middle" fill="#607080" font-size="9">Share items</text>
+        <text x="585" y="110" text-anchor="middle" fill="#607080" font-size="9">Manage OneLake security</text>
+        <text x="585" y="124" text-anchor="middle" fill="#607080" font-size="9">Publish apps</text>
+
+        <rect x="700" y="60" width="190" height="75" rx="6" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="795" y="80" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Contributor (Engineer)</text>
+        <text x="795" y="96" text-anchor="middle" fill="#607080" font-size="9">Create / edit items</text>
+        <text x="795" y="110" text-anchor="middle" fill="#607080" font-size="9">Build pipelines</text>
+        <text x="795" y="124" text-anchor="middle" fill="#607080" font-size="9">Run notebooks</text>
+
+        <rect x="490" y="150" width="190" height="75" rx="6" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="585" y="170" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Contributor (Analyst)</text>
+        <text x="585" y="186" text-anchor="middle" fill="#607080" font-size="9">Build reports</text>
+        <text x="585" y="200" text-anchor="middle" fill="#607080" font-size="9">Create semantic models</text>
+        <text x="585" y="214" text-anchor="middle" fill="#607080" font-size="9">Subject to RLS / CLS</text>
+
+        <rect x="700" y="150" width="190" height="75" rx="6" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="795" y="170" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Viewer (Consumer)</text>
+        <text x="795" y="186" text-anchor="middle" fill="#607080" font-size="9">Read-only access</text>
+        <text x="795" y="200" text-anchor="middle" fill="#607080" font-size="9">OneLake security enforced</text>
+        <text x="795" y="214" text-anchor="middle" fill="#607080" font-size="9">SQL endpoint with policy</text>
+
+        <rect x="490" y="240" width="400" height="75" rx="6" fill="white" stroke="#0078D4" stroke-width="1"/>
+        <text x="690" y="260" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Fabric Items (via OneLake Shortcuts to ADLS Gen2)</text>
+        <text x="550" y="280" fill="#607080" font-size="9.5">• Lakehouses</text>
+        <text x="550" y="296" fill="#607080" font-size="9.5">• Pipelines</text>
+        <text x="680" y="280" fill="#607080" font-size="9.5">• Notebooks</text>
+        <text x="680" y="296" fill="#607080" font-size="9.5">• Semantic Models</text>
+        <text x="810" y="280" fill="#607080" font-size="9.5">• Reports</text>
+        <text x="810" y="296" fill="#607080" font-size="9.5">• Warehouses</text>
+
+        <rect x="490" y="330" width="400" height="28" rx="6" fill="#EEF4FA" stroke="#0078D4" stroke-width="1.5"/>
+        <text x="690" y="349" text-anchor="middle" fill="#0078D4" font-size="10" font-weight="bold">SG-Fabric-DataOwners  |  SG-Fabric-DataEngineers  |  SG-Fabric-Consumers</text>
+
+        <rect x="490" y="370" width="400" height="50" rx="6" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1"/>
+        <text x="690" y="390" text-anchor="middle" fill="#2E7D32" font-size="10" font-weight="bold">✓  NO DIRECT ADLS GEN2 ACCESS</text>
+        <text x="690" y="406" text-anchor="middle" fill="#1A1A2E" font-size="9">Data plane users access data only through Fabric shortcuts — ADLS firewall blocks all non-Fabric access</text>
+      </svg>
+    </div>
+  </div>
+
+  <!-- DIAGRAM 4: Security Evaluation Flow -->
+  <div id="panel-flow" class="diagram-panel">
+    <div class="card">
+      <h3>Security Evaluation Flow: User Query to Data Access</h3>
+      <p class="subtitle">Sequential evaluation for a Viewer-role user querying data through a Fabric shortcut pointing to ADLS Gen2. Failure at any step results in access denied.</p>
+      <svg viewBox="0 0 920 330">
+        <defs>
+          <marker id="afg" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#2E7D32"/></marker>
+          <marker id="afr2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#C62828"/></marker>
+        </defs>
+
+        <!-- Step boxes -->
+        <g>
+          <rect x="10" y="20" width="135" height="135" rx="10" fill="white" stroke="#1B3A5C" stroke-width="2"/>
+          <circle cx="32" cy="42" r="14" fill="#1B3A5C"/>
+          <text x="32" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">1</text>
+          <text x="78" y="44" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Entra ID</text>
+          <text x="78" y="58" text-anchor="middle" fill="#607080" font-size="9">Authentication</text>
+          <line x1="20" y1="68" x2="135" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="78" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">Valid identity?</text>
+          <text x="42" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS → Next</text>
+          <text x="42" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <line x1="150" y1="88" x2="165" y2="88" stroke="#2E7D32" stroke-width="2" marker-end="url(#afg)"/>
+
+        <g>
+          <rect x="170" y="20" width="135" height="135" rx="10" fill="white" stroke="#0078D4" stroke-width="2"/>
+          <circle cx="192" cy="42" r="14" fill="#0078D4"/>
+          <text x="192" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">2</text>
+          <text x="238" y="44" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">ADLS Firewall</text>
+          <text x="238" y="58" text-anchor="middle" fill="#607080" font-size="9">Network Check</text>
+          <line x1="180" y1="68" x2="295" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="238" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">Allowed source?</text>
+          <text x="202" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS → Next</text>
+          <text x="202" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <line x1="310" y1="88" x2="325" y2="88" stroke="#2E7D32" stroke-width="2" marker-end="url(#afg)"/>
+
+        <g>
+          <rect x="330" y="20" width="135" height="135" rx="10" fill="white" stroke="#0277BD" stroke-width="2"/>
+          <circle cx="352" cy="42" r="14" fill="#0277BD"/>
+          <text x="352" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">3</text>
+          <text x="398" y="44" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">ADLS RBAC</text>
+          <text x="398" y="58" text-anchor="middle" fill="#607080" font-size="9">Storage Auth</text>
+          <line x1="340" y1="68" x2="455" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="398" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">SPN has role?</text>
+          <text x="362" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS → Next</text>
+          <text x="362" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <line x1="470" y1="88" x2="485" y2="88" stroke="#2E7D32" stroke-width="2" marker-end="url(#afg)"/>
+
+        <g>
+          <rect x="490" y="20" width="135" height="135" rx="10" fill="white" stroke="#5C2D91" stroke-width="2"/>
+          <circle cx="512" cy="42" r="14" fill="#5C2D91"/>
+          <text x="512" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">4</text>
+          <text x="558" y="44" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">Fabric WS</text>
+          <text x="558" y="58" text-anchor="middle" fill="#607080" font-size="9">Workspace Role</text>
+          <line x1="500" y1="68" x2="615" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="558" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">Has Viewer role?</text>
+          <text x="522" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS → Next</text>
+          <text x="522" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <line x1="630" y1="88" x2="645" y2="88" stroke="#2E7D32" stroke-width="2" marker-end="url(#afg)"/>
+
+        <g>
+          <rect x="650" y="20" width="135" height="135" rx="10" fill="white" stroke="#2E7D32" stroke-width="2"/>
+          <circle cx="672" cy="42" r="14" fill="#2E7D32"/>
+          <text x="672" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">5</text>
+          <text x="718" y="44" text-anchor="middle" fill="#1B3A5C" font-size="11" font-weight="bold">OneLake Sec</text>
+          <text x="718" y="58" text-anchor="middle" fill="#607080" font-size="9">Data Access Role</text>
+          <line x1="660" y1="68" x2="775" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="718" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">In granted role?</text>
+          <text x="682" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS → Next</text>
+          <text x="682" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <line x1="790" y1="88" x2="805" y2="88" stroke="#2E7D32" stroke-width="2" marker-end="url(#afg)"/>
+
+        <g>
+          <rect x="810" y="20" width="100" height="135" rx="10" fill="white" stroke="#E65100" stroke-width="2"/>
+          <circle cx="832" cy="42" r="14" fill="#E65100"/>
+          <text x="832" y="47" text-anchor="middle" fill="white" font-size="12" font-weight="bold">6</text>
+          <text x="860" y="44" text-anchor="middle" fill="#1B3A5C" font-size="10" font-weight="bold">Purview</text>
+          <text x="860" y="58" text-anchor="middle" fill="#607080" font-size="9">Policy Check</text>
+          <line x1="820" y1="68" x2="900" y2="68" stroke="#D6E4F0" stroke-width="1"/>
+          <text x="860" y="86" text-anchor="middle" fill="#1A1A2E" font-size="10">Label OK?</text>
+          <text x="830" y="110" fill="#2E7D32" font-size="9" font-weight="bold">✓ PASS</text>
+          <text x="830" y="142" fill="#C62828" font-size="9" font-weight="bold">✗ FAIL ↓</text>
+        </g>
+
+        <!-- Data Access success -->
+        <rect x="810" y="170" width="100" height="32" rx="6" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2"/>
+        <text x="860" y="191" text-anchor="middle" fill="#2E7D32" font-size="10" font-weight="bold">✓ ACCESS</text>
+
+        <!-- Fail arrows -->
+        <line x1="78" y1="157" x2="78" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+        <line x1="238" y1="157" x2="238" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+        <line x1="398" y1="157" x2="398" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+        <line x1="558" y1="157" x2="558" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+        <line x1="718" y1="157" x2="718" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+        <line x1="860" y1="157" x2="860" y2="228" stroke="#C62828" stroke-width="1.5" marker-end="url(#afr2)"/>
+
+        <!-- Denied bar -->
+        <rect x="10" y="233" width="900" height="35" rx="6" fill="#FCE4EC" stroke="#C62828" stroke-width="1.5"/>
+        <text x="460" y="255" text-anchor="middle" fill="#C62828" font-size="12" font-weight="bold">✗  ACCESS DENIED — Failure at any step blocks access regardless of permissions at other layers</text>
+
+        <!-- Audit bar -->
+        <rect x="10" y="283" width="900" height="38" rx="6" fill="#EEF4FA" stroke="#1B3A5C" stroke-width="1"/>
+        <text x="50" y="307" fill="#1B3A5C" font-size="10" font-weight="bold">AUDIT:</text>
+        <text x="115" y="307" fill="#1A1A2E" font-size="10">Azure Storage Logs</text>
+        <line x1="250" y1="290" x2="250" y2="315" stroke="#D6E4F0" stroke-width="1"/>
+        <text x="290" y="307" fill="#1A1A2E" font-size="10">Fabric Activity Logs</text>
+        <line x1="435" y1="290" x2="435" y2="315" stroke="#D6E4F0" stroke-width="1"/>
+        <text x="495" y="307" fill="#1A1A2E" font-size="10">OneLake Diagnostics</text>
+        <line x1="635" y1="290" x2="635" y2="315" stroke="#D6E4F0" stroke-width="1"/>
+        <text x="700" y="307" fill="#1A1A2E" font-size="10">Purview Audit Events</text>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<button class="print-btn" onclick="window.print()">🖨 Print All</button>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.diagram-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+
+  if (id === 'all') {
+    document.querySelectorAll('.diagram-panel').forEach(p => p.classList.add('active'));
+    document.querySelectorAll('.tab').forEach(t => { if (t.textContent === 'Show All') t.classList.add('active'); });
+  } else {
+    document.getElementById('panel-' + id).classList.add('active');
+    document.querySelectorAll('.tab').forEach(t => {
+      const map = { 'Three-Layer Security': 'layers', 'Medallion Architecture': 'medallion', 'Control vs Data Plane': 'planes', 'Security Evaluation Flow': 'flow' };
+      if (map[t.textContent] === id) t.classList.add('active');
+    });
+  }
+}
+</script>
+
+</body>
+</html>
